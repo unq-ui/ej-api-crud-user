@@ -1,9 +1,12 @@
 package user.api
 
-import user.model.NotFound
+import user.model.UserNotFoundException
 import io.javalin.Javalin
 import io.javalin.apibuilder.ApiBuilder.*
 import io.javalin.core.util.RouteOverviewPlugin
+import io.javalin.http.BadRequestResponse
+import io.javalin.http.NotFoundResponse
+import user.model.UsernameExistException
 
 fun main() {
     val app = Javalin.create {
@@ -21,12 +24,16 @@ fun main() {
             path(":id") {
                 get(userController::getUser)
                 put(userController::updateUser)
+                delete(userController::deleteUser)
             }
         }
     }
 
-    app.exception(NotFound::class.java) { e, ctx ->
-        ctx.status(404)
-        ctx.json(NotFoundHandler(e.message!!))
+    app.exception(UserNotFoundException::class.java) { e, _ ->
+        throw NotFoundResponse(e.toString())
+    }
+
+    app.exception(UsernameExistException::class.java) { e, _ ->
+        throw BadRequestResponse(e.toString())
     }
 }

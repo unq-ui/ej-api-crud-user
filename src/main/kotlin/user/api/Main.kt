@@ -2,11 +2,11 @@ package user.api
 
 import io.javalin.Javalin
 import user.model.Backend
-import user.model.NotFound
-import user.model.UsernameExist
+import user.model.UserNotFoundException
+import user.model.UsernameExistException
 import io.javalin.core.util.RouteOverviewPlugin
 
-fun main(args: Array<String>) {
+fun main() {
     val app = Javalin.create {
         it.defaultContentType = "application/json"
         it.registerPlugin(RouteOverviewPlugin("/routes"))
@@ -19,38 +19,82 @@ fun main(args: Array<String>) {
     // ctx.res -> Response
     app.get("/") { ctx -> ctx.result("Hello World") }
 
-    val backend = Backend(mutableListOf())
+    // Init Backend
+    val backend = Backend()
 
-    // Crud user
+    // CRUD
 
-    app.get("/users") {
-        it.json(backend.users.map{ UserView(it)})
+    // GET /users
+    app.get("/users") { ctx ->
+        val users = backend.users.map { UserViewMapper(it.id, it.username, it.displayName) }
+        ctx.json(users)
     }
 
-    app.get("/users/:id") {
-        it.json(backend.getUser(it.pathParam("id")))
-    }
-
-    app.post("/users") {
-        val newUser = it.bodyAsClass(UserRegister::class.java)
+    // GET /users/:id
+    app.get("/users/:id") { ctx ->
         try {
-            backend.register(newUser.username, newUser.password, newUser.displayName)
-            it.json("ok")
-        } catch (exception: UsernameExist) {
-            it.status(400)
-            it.json(Handler(400, "Bad request", "Username is token"))
+            val user = backend.getUser(ctx.pathParam("id"))
+            ctx.json(UserViewMapper(user.id, user.username, user.displayName))
+        } catch (e: UserNotFoundException) {
+            ctx.status(404)
+            ctx.json(mapOf(
+                "message" to e.message.toString()
+            ))
         }
     }
 
-    app.put("/users/:id") {
-        val userId = it.pathParam("id")
-        val updateUser = it.bodyAsClass(UserUpdate::class.java)
-        backend.getUser(userId).displayName = updateUser.displayName
-        it.json("updated")
+    // POST /users
+    app.post("/users") { ctx ->
+        try {
+            val newUser = ctx.bodyValidator<UserRegisterMapper>()
+                .check({
+                    it.username != null && it.password != null && it.displayName != null
+                }, "Invalid body: username, password and displayName should not be null")
+                .get()
+
+            backend.register(newUser.username!!, newUser.password!!, newUser.displayName!!)
+            ctx.status(201)
+            ctx.json(mapOf("message" to "ok"))
+        } catch (e: UsernameExistException) {
+            ctx.status(400)
+            ctx.json(mapOf(
+                "message" to e.message.toString()
+            ))
+        }
     }
 
-    app.exception(NotFound::class.java) { e, ctx ->
-        ctx.status(404)
-        ctx.json(NotFoundHandler(e.message!!))
+    // PUT /users/:id
+    app.put("/users/:id") { ctx ->
+        try {
+            val userId = ctx.pathParam("id")
+            val newProps = ctx.bodyValidator<UserUpdateMapper>()
+                .check(
+                    { it.displayName != null },
+                    "Invalid body: username, password and displayName should not be null")
+                .get()
+            val currentUser = backend.getUser(userId)
+            currentUser.displayName = newProps.displayName!!
+            backend.updateWith(userId, currentUser)
+            ctx.json(UserViewMapper(currentUser.id, currentUser.username, currentUser.displayName))
+        } catch (e: UserNotFoundException) {
+            ctx.status(404)
+            ctx.json(mapOf(
+                "message" to e.message.toString()
+            ))
+        }
+    }
+
+    // DELETE /users/:id
+    app.delete("/users/:id") { ctx ->
+        try {
+            val userId = ctx.pathParam("id")
+            backend.remove(userId)
+            ctx.status(204)
+        } catch (e: UserNotFoundException) {
+            ctx.status(404)
+            ctx.json(mapOf(
+                "message" to e.message.toString()
+            ))
+        }
     }
 }

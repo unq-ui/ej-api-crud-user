@@ -1,5 +1,5 @@
 package user.model
 
-class NotFound(message: String): Exception(message)
+class UserNotFoundException(message: String): Exception(message)
 
-class UsernameExist: Exception("Username is used")
+class UsernameExistException(username: String) : Exception("Username $username is used")

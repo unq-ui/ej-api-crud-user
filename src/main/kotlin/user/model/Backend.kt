@@ -1,30 +1,27 @@
 package user.model
 
-class Backend(val users: MutableList<User>) {
-
+class Backend {
     private var userId = 0
-
-    fun login(username: String, password: String): User {
-        return this.lookUpUser({ it.username == username && it.password == password }, "Wrong user or password")
-    }
+    val users = mutableListOf<User>()
 
     fun register(username: String, password: String, displayName: String) {
-        if(this.existUsername(username)) {
-            throw UsernameExist()
+        if(existUsername(username)) {
+            throw UsernameExistException(username)
         }
-        users.add(User(""+userId++, username, password, displayName, mutableListOf(), mutableListOf()))
+        users.add(User("${++userId}", username, password, displayName))
     }
 
     fun getUser(id: String): User {
-        return this.lookUpUser({ it.id == id }, "Not found userID")
+        return users.firstOrNull { it.id == id }
+            ?: throw UserNotFoundException("Not found user with id $id")
     }
 
-    private fun lookUpUser(function: (User) -> Boolean, notFoundText: String): User {
-        return users.firstOrNull(function) ?: throw NotFound(notFoundText)
+    fun updateWith(userId: String, updatedUser: User) {
+        remove(userId)
+        users.add(updatedUser)
     }
 
-    private fun existUsername(username: String): Boolean {
-        return users.any { it.username == username }
-    }
+    fun remove(userId: String) = users.removeIf { it.id == userId }
 
+    private fun existUsername(username: String): Boolean = users.any { it.username == username }
 }

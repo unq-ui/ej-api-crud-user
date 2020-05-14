@@ -2,37 +2,48 @@ package user.api
 
 import io.javalin.http.Context
 import user.model.Backend
-import user.model.User
-import user.model.UsernameExist
 
 class UserController {
-
-    val backend = Backend(mutableListOf<User>())
+    private val backend = Backend()
 
     fun getAll(ctx: Context) {
-        ctx.json(backend.users)
+        val users = backend.users.map { UserViewMapper(it.id, it.username, it.displayName) }
+        ctx.json(users)
     }
 
     fun createUser(ctx: Context) {
-        val newUser = ctx.bodyAsClass(UserRegister::class.java)
-        try {
-            backend.register(newUser.username, newUser.password, newUser.displayName)
-            ctx.json("ok")
-        } catch (exception: UsernameExist) {
-            ctx.status(400)
-            ctx.json(Handler(400, "Bad request", "Username is token"))
-        }
+        val newUser = ctx.bodyValidator<UserRegisterMapper>()
+            .check({
+                it.username != null && it.password != null && it.displayName != null
+            }, "Invalid body: username, password and displayName should not be null")
+            .get()
+
+        backend.register(newUser.username!!, newUser.password!!, newUser.displayName!!)
+        ctx.status(201)
+        ctx.json(mapOf("message" to "ok"))
     }
 
     fun getUser(ctx: Context) {
-        val userId = ctx.pathParam("id")
-        ctx.json(backend.getUser(userId))
+        val user = backend.getUser(ctx.pathParam("id"))
+        ctx.json(UserViewMapper(user.id, user.username, user.displayName))
     }
 
     fun updateUser(ctx: Context) {
         val userId = ctx.pathParam("id")
-        val updateUser = ctx.bodyAsClass(UserUpdate::class.java)
-        backend.getUser(userId).displayName = updateUser.displayName
-        ctx.json("updated")
+        val newProps = ctx.bodyValidator<UserUpdateMapper>()
+            .check(
+                { it.displayName != null },
+                "Invalid body: username, password and displayName should not be null")
+            .get()
+        val currentUser = backend.getUser(userId)
+        currentUser.displayName = newProps.displayName!!
+        backend.updateWith(userId, currentUser)
+        ctx.json(UserViewMapper(currentUser.id, currentUser.username, currentUser.displayName))
+    }
+
+    fun deleteUser(ctx: Context) {
+        val userId = ctx.pathParam("id")
+        backend.remove(userId)
+        ctx.status(204)
     }
 }
